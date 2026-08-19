@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>治理智能体矩阵 · 身份验证</title>
+<style>
+  :root{
+    --deep:#000a17;
+    --blue:#007fff;
+    --paper:#ffffff;
+    --dim:rgba(255,255,255,.62);
+    --faint:rgba(255,255,255,.38);
+    --glass-border:rgba(255,255,255,.18);
+    --danger:#ff6b6b;
+    --radius-card:32px;
+    --radius-pill:999px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; height:100%; width:100%; overflow:hidden;
+    font-family:-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    color:var(--paper);
+    background:
+      linear-gradient(100deg, rgba(0,10,23,.15) 0%, rgba(0,10,23,.32) 40%, rgba(0,10,23,.72) 68%, rgba(0,6,14,.88) 100%),
+      url('%E8%83%8C%E6%99%AF%201.png') center center / cover no-repeat,
+      var(--deep);
+  }
+  .corner-fade{
+    position:fixed; inset:0; z-index:2; pointer-events:none;
+    background:
+      linear-gradient(200deg, transparent 55%, rgba(0,6,14,.4) 100%),
+      radial-gradient(ellipse 55% 50% at 100% 100%, rgba(0,0,0,.4), transparent 70%);
+  }
+  .bokeh{ position:fixed; inset:0; z-index:1; pointer-events:none; overflow:hidden; }
+  .bokeh span{ position:absolute; border-radius:50%; animation:drift linear infinite; will-change:transform; }
+  @keyframes drift{
+    0%{ transform:translateY(0) translateX(0); }
+    50%{ transform:translateY(-22px) translateX(6px); }
+    100%{ transform:translateY(0) translateX(0); }
+  }
+
+  .stage{
+    position:fixed; inset:0; z-index:2;
+    display:flex; align-items:center; justify-content:flex-end;
+    padding:24px 7vw;
+  }
+  .auth-wrap{
+    width:420px; max-width:100%;
+    opacity:0; transform:translateY(14px);
+    animation:fadeUp .7s .05s ease forwards;
+  }
+  @media (max-width:860px){
+    .stage{ justify-content:center; padding:24px; }
+  }
+  @keyframes fadeUp{ from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:translateY(0);} }
+
+  .auth-card{
+    position:relative;
+    background:linear-gradient(155deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.05) 55%, rgba(255,255,255,.03) 100%);
+    border:1px solid var(--glass-border);
+    border-radius:var(--radius-card);
+    backdrop-filter:blur(28px) saturate(160%);
+    -webkit-backdrop-filter:blur(28px) saturate(160%);
+    box-shadow:0 40px 80px -30px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.22);
+    padding:30px 28px 28px;
+    overflow:hidden;
+  }
+  .auth-card::before{
+    content:""; position:absolute; top:-42%; left:-12%; width:80%; height:70%;
+    background:radial-gradient(ellipse, rgba(0,127,255,.35), transparent 70%);
+    pointer-events:none; filter:blur(6px);
+  }
+
+  .headline{ position:relative; margin-bottom:20px; }
+  .headline h2{ font-size:28px; font-weight:800; margin:0 0 8px; letter-spacing:-.01em; }
+  .headline p{ font-size:13px; color:var(--dim); margin:0; line-height:1.6; }
+
+  .tabs{ position:relative; display:inline-flex; gap:6px; margin-bottom:22px; }
+  .tab-btn{
+    position:relative; display:flex; align-items:center; gap:8px;
+    background:rgba(255,255,255,.06); border:1px solid var(--glass-border); color:var(--dim);
+    font-family:inherit; font-size:13.5px; font-weight:600;
+    padding:9px 20px; border-radius:var(--radius-pill);
+    cursor:pointer; transition:color .3s ease, background .3s ease, border-color .3s ease;
+  }
+  .tab-btn .dot{ width:8px; height:8px; border-radius:50%; border:1.5px solid rgba(255,255,255,.5); flex:none; transition:all .25s ease; }
+  .tab-btn.active{ background:#fff; color:#0a1626; border-color:#fff; }
+  .tab-btn.active .dot{ border-color:var(--blue); background:var(--blue); box-shadow:0 0 0 3px rgba(0,127,255,.18); }
+
+  .form-panel{ display:none; flex-direction:column; gap:14px; }
+  .form-panel.active{ display:flex; animation:panelIn .35s ease; }
+  @keyframes panelIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-size:11px; font-weight:600; letter-spacing:.04em; color:var(--dim); padding-left:20px; }
+  .input-wrap{ position:relative; }
+  .field input{
+    width:100%; background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.14); border-radius:var(--radius-pill);
+    padding:15px 22px; color:var(--paper); font-size:14px;
+    font-family:inherit; outline:none;
+    transition:border-color .25s ease, background .25s ease, box-shadow .25s ease;
+  }
+  .field input::placeholder{ color:rgba(255,255,255,.35); }
+  .field input:focus{
+    border-color:rgba(0,127,255,.55); background:rgba(0,127,255,.1);
+    box-shadow:0 0 0 4px rgba(0,127,255,.14);
+  }
+  .field input.error{ border-color:rgba(255,107,107,.6); }
+  .field input.has-peek{ padding-right:64px; }
+  .field-msg{ font-size:11px; color:var(--danger); min-height:12px; padding-left:20px; opacity:0; transition:opacity .2s ease; }
+  .field-msg.show{ opacity:1; }
+
+  .peek-btn{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:34px; height:34px; border-radius:50%;
+    background:#fff; border:none; color:#0a1626;
+    font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 14px -4px rgba(0,0,0,.4);
+    transition:transform .2s ease, background .2s ease;
+  }
+  .peek-btn:hover{ transform:translateY(-50%) scale(1.07); }
+
+  .row-between{ display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:var(--dim); padding:2px 4px; }
+
+  .toggle{ display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
+  .toggle input{ display:none; }
+  .toggle .track{
+    width:40px; height:22px; border-radius:999px; flex:none; position:relative;
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2);
+    transition:background .25s ease, border-color .25s ease;
+  }
+  .toggle .track::after{
+    content:""; position:absolute; top:2px; left:2px; width:16px; height:16px;
+    border-radius:50%; background:#fff; transition:transform .25s cubic-bezier(.22,1,.36,1);
+    box-shadow:0 2px 6px rgba(0,0,0,.3);
+  }
+  .toggle input:checked + .track{ background:var(--blue); border-color:var(--blue); }
+  .toggle input:checked + .track::after{ transform:translateX(18px); }
+  .toggle .txt{ font-size:12.5px; color:var(--dim); }
+
+  .check{ display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+  .check input{ display:none; }
+  .check .dot{
+    width:16px; height:16px; border-radius:50%; flex:none; position:relative;
+    border:1.5px solid rgba(255,255,255,.4); transition:all .2s ease;
+  }
+  .check input:checked + .dot{ border-color:var(--blue); }
+  .check input:checked + .dot::after{
+    content:""; position:absolute; inset:3px; border-radius:50%;
+    background:var(--blue); box-shadow:0 0 0 3px rgba(0,127,255,.18);
+  }
+  .terms{ align-items:flex-start; font-size:11.5px; line-height:1.6; color:var(--dim); }
+  .terms .dot{ margin-top:2px; }
+
+  a.link{ color:var(--paper); text-decoration:none; font-weight:600; opacity:.85; }
+  a.link:hover{ opacity:1; text-decoration:underline; }
+
+  .submit-row{ display:flex; gap:10px; align-items:stretch; margin-top:8px; }
+  .submit-btn{
+    flex:1; position:relative; border:none; border-radius:var(--radius-pill);
+    background:#fff; color:#0a1626; font-family:inherit; font-size:14.5px; font-weight:700;
+    cursor:pointer; padding:16px 0; box-shadow:0 16px 34px -14px rgba(0,0,0,.55);
+    transition:transform .2s cubic-bezier(.22,1,.36,1), box-shadow .25s ease;
+  }
+  .submit-btn:hover{ transform:translateY(-2px); box-shadow:0 20px 40px -14px rgba(0,0,0,.6); }
+  .submit-btn:active{ transform:translateY(0) scale(.98); }
+  .submit-btn .btn-label{ transition:opacity .2s ease; }
+  .submit-btn.loading .btn-label{ opacity:0; }
+  .submit-btn .spinner{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    opacity:0; transition:opacity .2s ease;
+  }
+  .submit-btn.loading .spinner{ opacity:1; }
+  .spinner i{
+    width:16px; height:16px; border-radius:50%;
+    border:2px solid rgba(10,22,38,.25); border-top-color:#0a1626;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .switch-line{ text-align:center; margin-top:20px; font-size:12.5px; color:var(--dim); }
+  .switch-line a{ color:#fff; font-weight:700; }
+
+  .hint{
+    position:fixed; left:0; right:0; bottom:22px; text-align:center; z-index:3;
+    font-size:11px; color:rgba(255,255,255,.35); letter-spacing:.04em;
+    opacity:0; animation:fadeUp .8s .5s ease forwards; pointer-events:none;
+  }
+
+  .toast{
+    position:fixed; left:50%; bottom:36px; transform:translateX(-50%) translateY(12px);
+    opacity:0; pointer-events:none; z-index:60;
+    padding:12px 24px; border-radius:var(--radius-pill);
+    font-size:12.5px; font-weight:600; background:#fff; color:#0a1626;
+    box-shadow:0 20px 40px -14px rgba(0,0,0,.5);
+    transition:opacity .3s ease, transform .3s ease;
+    white-space:nowrap;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  @media (max-width:460px){
+    .auth-wrap{ width:100%; }
+    .headline h2{ font-size:24px; }
+  }
+</style>
+</head>
+<body>
+  <div class="corner-fade"></div>
+  <div class="bokeh" id="bokeh"></div>
+
+  <div class="stage">
+    <div class="auth-wrap">
+      <div class="auth-card">
+        <div class="tabs" id="tabs">
+          <button type="button" class="tab-btn active" data-tab="login"><span class="dot"></span>登录</button>
+          <button type="button" class="tab-btn" data-tab="register"><span class="dot"></span>注册</button>
+        </div>
+
+        <div class="headline" id="headline">
+          <h2>欢迎回来</h2>
+          <p>登录以继续访问治理智能体矩阵控制台</p>
+        </div>
+
+        <form class="form-panel active" id="loginForm" novalidate>
+          <div class="field">
+            <label>账号</label>
+            <div class="input-wrap">
+              <input type="text" name="account" placeholder="用户名 / 邮箱" autocomplete="username">
+            </div>
+            <div class="field-msg"></div>
+          </div>
+          <div class="field">
+            <label>密码</label>
+            <div class="input-wrap">
+              <input type="password" name="password" class="has-peek" placeholder="请输入密码" autocomplete="current-password">
+              <button type="button" class="peek-btn">◯</button>
+            </div>
+            <div class="field-msg"></div>
+          </div>
+          <div class="row-between">
+            <label class="toggle">
+              <input type="checkbox" checked>
+              <span class="track"></span>
+              <span class="txt">记住我</span>
+            </label>
+            <a href="#" class="link">忘记密码?</a>
+          </div>
+          <div class="submit-row">
+            <button type="submit" class="submit-btn">
+              <span class="btn-label">登 录</span>
+              <span class="spinner"><i></i></span>
+            </button>
+          </div>
+        </form>
+
+        <form class="form-panel" id="registerForm" novalidate>
+          <div class="field">
+            <label>用户名</label>
+            <div class="input-wrap">
+              <input type="text" name="username" placeholder="设置一个用户名" autocomplete="username">
+            </div>
+            <div class="field-msg"></div>
+          </div>
+          <div class="field">
+            <label>邮箱</label>
+            <div class="input-wrap">
+              <input type="email" name="email" placeholder="you@example.com" autocomplete="email">
+            </div>
+            <div class="field-msg"></div>
+          </div>
+          <div class="field">
+            <label>密码</label>
+            <div class="input-wrap">
+              <input type="password" name="password" class="has-peek" placeholder="至少 6 位字符" autocomplete="new-password">
+              <button type="button" class="peek-btn">◯</button>
+            </div>
+            <div class="field-msg"></div>
+          </div>
+          <div class="field">
+            <label>确认密码</label>
+            <div class="input-wrap">
+              <input type="password" name="confirm" class="has-peek" placeholder="再次输入密码" autocomplete="new-password">
+              <button type="button" class="peek-btn">◯</button>
+            </div>
+            <div class="field-msg"></div>
+          </div>
+          <label class="check terms">
+            <input type="checkbox">
+            <span class="dot"></span>
+            <span>我已阅读并同意《服务条款》与《隐私政策》</span>
+          </label>
+          <div class="submit-row">
+            <button type="submit" class="submit-btn">
+              <span class="btn-label">创 建 账 号</span>
+              <span class="spinner"><i></i></span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="switch-line" id="switchLine">
+        还没有账号? <a href="#" id="switchLink">立即注册</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint">前端演示界面 · 未连接后端服务</div>
+  <div class="toast" id="toast"></div>
+
+<script>
+  // ---- ambient bokeh dust ----
+  (function initBokeh(){
+    const holder = document.getElementById('bokeh');
+    const colors = ['#ffffff', '#bfe0ff', '#7fc4ff', '#007fff'];
+    const n = 22;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('span');
+      const size = 1.4 + Math.random() * 2.6;
+      const x = Math.random() * 100, y = Math.random() * 100;
+      const dur = 6 + Math.random() * 7;
+      const delay = -Math.random() * dur;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      s.style.left = x + 'vw'; s.style.top = y + 'vh';
+      s.style.width = size + 'px'; s.style.height = size + 'px';
+      s.style.background = color;
+      s.style.opacity = (0.12 + Math.random() * 0.3).toFixed(2);
+      s.style.boxShadow = `0 0 ${(size * 3).toFixed(1)}px ${color}`;
+      s.style.animationDuration = dur.toFixed(2) + 's';
+      s.style.animationDelay = delay.toFixed(2) + 's';
+      holder.appendChild(s);
+    }
+  })();
+
+  // ---- tab switching ----
+  const tabs = document.getElementById('tabs');
+  const tabBtns = tabs.querySelectorAll('.tab-btn');
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  const switchLine = document.getElementById('switchLine');
+  const headline = document.getElementById('headline');
+
+  const COPY = {
+    login:    { h2:'欢迎回来', p:'登录以继续访问治理智能体矩阵控制台' },
+    register: { h2:'创建账号', p:'注册新账号以开始使用治理智能体矩阵' }
+  };
+
+  function setTab(name){
+    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    loginForm.classList.toggle('active', name === 'login');
+    registerForm.classList.toggle('active', name === 'register');
+    headline.querySelector('h2').textContent = COPY[name].h2;
+    headline.querySelector('p').textContent = COPY[name].p;
+    switchLine.innerHTML = name === 'login'
+      ? '还没有账号? <a href="#" id="switchLink">立即注册</a>'
+      : '已有账号? <a href="#" id="switchLink">去登录</a>';
+    bindSwitchLink();
+  }
+  function bindSwitchLink(){
+    const link = document.getElementById('switchLink');
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      setTab(tabs.querySelector('.tab-btn.active').dataset.tab === 'login' ? 'register' : 'login');
+    });
+  }
+  tabBtns.forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  bindSwitchLink();
+
+  // ---- password peek toggles ----
+  document.querySelectorAll('.peek-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = btn.previousElementSibling;
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.textContent = showing ? '◯' : '●';
+    });
+  });
+
+  // ---- validation + demo submit ----
+  function fieldOf(input){ return input.closest('.field'); }
+  function setError(input, msg){
+    const f = fieldOf(input);
+    const msgEl = f.querySelector('.field-msg');
+    input.classList.add('error');
+    msgEl.textContent = msg;
+    msgEl.classList.add('show');
+  }
+  function clearError(input){
+    const f = fieldOf(input);
+    const msgEl = f.querySelector('.field-msg');
+    input.classList.remove('error');
+    msgEl.classList.remove('show');
+  }
+  document.querySelectorAll('.field input').forEach(inp => {
+    inp.addEventListener('input', () => clearError(inp));
+  });
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  function setLoading(form, on){
+    form.querySelectorAll('.submit-btn').forEach(btn => {
+      btn.classList.toggle('loading', on);
+      btn.disabled = on;
+    });
+  }
+
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const account = loginForm.querySelector('[name="account"]');
+    const password = loginForm.querySelector('[name="password"]');
+    let ok = true;
+    if (!account.value.trim()) { setError(account, '请输入用户名或邮箱'); ok = false; }
+    if (!password.value) { setError(password, '请输入密码'); ok = false; }
+    if (!ok) return;
+    setLoading(loginForm, true);
+    setTimeout(() => {
+      setLoading(loginForm, false);
+      showToast('登录成功 · 正在进入治理智能体矩阵…');
+      setTimeout(() => { window.location.href = 'agent-grid.html'; }, 850);
+    }, 900);
+  });
+
+  registerForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = registerForm.querySelector('[name="username"]');
+    const email = registerForm.querySelector('[name="email"]');
+    const password = registerForm.querySelector('[name="password"]');
+    const confirm = registerForm.querySelector('[name="confirm"]');
+    const terms = registerForm.querySelector('.terms input');
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    let ok = true;
+    if (!username.value.trim()) { setError(username, '请输入用户名'); ok = false; }
+    if (!emailRe.test(email.value.trim())) { setError(email, '请输入有效的邮箱地址'); ok = false; }
+    if (password.value.length < 6) { setError(password, '密码至少需要 6 位字符'); ok = false; }
+    if (confirm.value !== password.value || !confirm.value) { setError(confirm, '两次输入的密码不一致'); ok = false; }
+    if (!terms.checked) { showToast('请先勾选同意服务条款'); ok = false; }
+    if (!ok) return;
+    setLoading(registerForm, true);
+    setTimeout(() => {
+      setLoading(registerForm, false);
+      showToast('注册成功 · 正在进入治理智能体矩阵…');
+      setTimeout(() => { window.location.href = 'agent-grid.html'; }, 850);
+    }, 900);
+  });
+</script>
+</body>
+</html>
